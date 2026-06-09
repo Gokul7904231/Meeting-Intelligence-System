@@ -627,7 +627,7 @@ export default function App() {
                         className="w-full text-left px-3 py-2 text-xs text-neutral-600 hover:bg-rose-50/50 hover:text-rose-600 rounded-xl transition-colors duration-200 font-semibold flex items-center space-x-2"
                       >
                         <LogOut className="h-3.5 w-3.5 text-rose-500" />
-                        <span>Clear Session</span>
+                        <span>Logout</span>
                       </button>
                     </div>
                   </div>
