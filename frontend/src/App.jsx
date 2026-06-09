@@ -99,6 +99,26 @@ export default function App() {
   // Tab State inside Meeting Details ("summary" | "actions" | "follow ups")
   const [detailsTab, setDetailsTab] = useState('summary');
 
+  // Mobile layout state variables
+  const [isMobile, setIsMobile] = useState(false);
+  const [showMobileDetails, setShowMobileDetails] = useState(false);
+
+  useEffect(() => {
+    const handleResize = () => {
+      const mobile = window.innerWidth < 1024;
+      setIsMobile(mobile);
+      // Automatically adjust detailsTab if switching between mobile/desktop layouts
+      setDetailsTab(prev => {
+        if (mobile && prev === 'summary') return 'transcript';
+        if (!mobile && prev === 'transcript') return 'summary';
+        return prev;
+      });
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   // Check Backend Connection Status
   useEffect(() => {
     const checkHealth = () => {
@@ -211,7 +231,7 @@ export default function App() {
         setMeetingsTotal(data.data.total);
         // Default select the first meeting if none is selected
         if (data.data.items.length > 0 && !selectedMeeting) {
-          handleViewMeetingDetails(data.data.items[0]);
+          handleViewMeetingDetails(data.data.items[0], false);
         }
       } else {
         showToast(data.error?.message || "Failed to load meetings list.", "error", data.traceId);
@@ -351,6 +371,8 @@ export default function App() {
           // Immediately redirect to Detail View
           setSelectedMeeting(createData.data);
           setMeetingAnalysis(analyzeData.data);
+          setDetailsTab(window.innerWidth < 1024 ? 'transcript' : 'summary');
+          setShowMobileDetails(true);
         } else {
           showToast(analyzeData.error?.message || "AI Extraction failed.", "error", analyzeData.traceId);
         }
@@ -367,11 +389,14 @@ export default function App() {
   };
 
   // API Call: View Details
-  const handleViewMeetingDetails = async (meeting) => {
+  const handleViewMeetingDetails = async (meeting, shouldShowMobile = true) => {
     setSelectedMeeting(meeting);
     setIsAnalyzing(true);
     setMeetingAnalysis(null);
-    setDetailsTab('summary');
+    setDetailsTab(window.innerWidth < 1024 ? 'transcript' : 'summary');
+    if (shouldShowMobile) {
+      setShowMobileDetails(true);
+    }
 
     try {
       const response = await fetchWithAuth(`/ai/analyze?meetingId=${meeting.id}`, {
@@ -513,8 +538,8 @@ export default function App() {
     <div className="flex flex-col h-screen bg-neutral-50 text-neutral-805 overflow-hidden font-sans select-none">
 
       {/* 1. Floating Glassy Top Navigation Bar */}
-      <div className="w-full max-w-7xl mx-auto px-6 pt-4 shrink-0">
-        <header className="w-full px-6 h-16 flex items-center justify-between bg-white/80 backdrop-blur-md border border-neutral-100 rounded-full shadow-lg shadow-black/[0.03]">
+      <div className="w-full max-w-7xl mx-auto px-4 md:px-6 pt-3 md:pt-4 shrink-0">
+        <header className="w-full px-4 md:px-6 h-16 flex items-center justify-between bg-white/80 backdrop-blur-md border border-neutral-100 rounded-full shadow-lg shadow-black/[0.03]">
           <div className="flex items-center space-x-2.5">
             <div className="h-8 w-8 rounded-full bg-black flex items-center justify-center font-bold text-white text-xs shadow-sm hover:scale-105 active:scale-95 transition-transform duration-300">
               H
@@ -525,7 +550,7 @@ export default function App() {
           </div>
 
           {/* Center Navigation Pill-menu */}
-          <div className="flex items-center gap-1 bg-neutral-100/80 p-1 rounded-full border border-neutral-200/40 shrink-0">
+          <div className="hidden lg:flex items-center gap-1 bg-neutral-100/80 p-1 rounded-full border border-neutral-200/40 shrink-0">
             {[
               { id: 'dashboard', label: 'Dashboard', icon: BarChart2 },
               { id: 'meetings', label: 'Meetings Library', icon: Calendar },
@@ -553,7 +578,7 @@ export default function App() {
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-2 bg-neutral-50 border border-neutral-100 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider shadow-sm">
               <span className={`h-1.5 w-1.5 rounded-full ${backendStatus === 'connected' ? 'bg-black animate-pulse' : 'bg-neutral-300'}`}></span>
-              <span className="text-neutral-500 font-semibold">GATEWAY</span>
+              <span className="text-neutral-500 font-semibold hidden sm:inline">GATEWAY</span>
             </div>
 
             <div className="relative">
@@ -673,152 +698,454 @@ export default function App() {
           </div>
         )}
 
-        {/* VIEW B: Meeting Library & Intelligence Hub (3-Column Layout View) */}
+        {/* VIEW B: Meeting Library & Intelligence Hub (3-Column Layout View on Desktop, List/Detail on Mobile) */}
         {currentView === 'meetings' && (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-[calc(100vh-6rem)] overflow-hidden">
-
-            {/* COLUMN 1: Ingested Meetings Library Feed (3 Columns) */}
-            <div className="lg:col-span-3 h-full overflow-y-auto pr-2 space-y-4">
-              <div className="flex items-center justify-between pb-2 border-b border-neutral-100/60">
-                <span className="text-[10px] font-bold tracking-widest text-neutral-400 uppercase font-bold">Meetings Archive</span>
-                <button
-                  onClick={() => setIsIngestModalOpen(true)}
-                  className="p-1.5 rounded-full bg-black text-white hover:bg-neutral-850 active:scale-95 transition focus:outline-none shadow-sm"
-                  title="Upload meeting"
-                >
-                  <Plus className="h-4 w-4" />
-                </button>
-              </div>
-
-              {/* Ingesting Skeleton Loader */}
-              {isIngesting && (
-                <div className="bg-white border border-neutral-100 p-4 rounded-2xl space-y-3 animate-pulse shadow-sm">
-                  <div className="h-4 bg-neutral-100 rounded w-2/3"></div>
-                  <div className="h-3 bg-neutral-100 rounded w-full"></div>
-                  <div className="pt-2 border-t border-neutral-50 text-[9px] text-neutral-400 font-mono">
-                    <span>Processing Trace: {ingestTraceId}</span>
-                  </div>
-                </div>
-              )}
-
-              {meetings.length === 0 && !isIngesting ? (
-                <p className="text-xs text-neutral-450 italic uppercase font-bold py-4">No meetings indexed.</p>
-              ) : (
-                <div className="space-y-3.5">
-                  {meetings.map((meeting, index) => {
-                    const isSelected = selectedMeeting?.id === meeting.id;
-                    return (
-                      <div
-                        key={meeting.id}
-                        onClick={() => handleViewMeetingDetails(meeting)}
-                        style={{ animationDelay: `${index * 50}ms` }}
-                        className={`p-4 border border-neutral-100/60 rounded-2xl cursor-pointer hover:shadow-lg hover:-translate-y-0.5 animate-fade-in-up transition-all duration-300 flex flex-col justify-between group ${isSelected ? 'bg-neutral-100 text-black shadow-sm border-neutral-200/50' : 'bg-white text-neutral-700'}`}
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <h4 className="text-xs font-bold uppercase tracking-wide truncate group-hover:text-black transition">{meeting.title}</h4>
-                          <ChevronRight className="h-4 w-4 text-neutral-400 group-hover:translate-x-0.5 transition shrink-0" />
-                        </div>
-                        <div className="flex items-center space-x-1 text-[9px] text-neutral-400 font-mono mt-3">
-                          <Clock className="h-3 w-3" />
-                          <span>{new Date(meeting.meetingDate).toLocaleDateString()}</span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* COLUMN 2: Transcript Console (4 Columns) */}
-            <div className="lg:col-span-4 h-full bg-white border border-neutral-100 rounded-3xl p-6 shadow-xl shadow-neutral-900/5 flex flex-col min-h-0 overflow-hidden">
-              <div className="pb-3 border-b border-neutral-100 shrink-0">
-                <span className="text-[10px] font-bold tracking-widest text-neutral-400 uppercase font-bold">Transcript Console</span>
-                {selectedMeeting && (
-                  <p className="text-[9px] text-neutral-500 mt-0.5 uppercase font-bold tracking-wider">Grounding analysis logs active</p>
-                )}
-              </div>
-
-              <div className="flex-1 overflow-y-auto mt-4 space-y-3.5 pr-1 min-h-0">
-                {selectedMeeting ? (
-                  selectedMeeting.transcript.map((line, index) => {
-                    const isHighlighted = activeCitationTimestamp === line.timestamp;
-                    return (
-                      <div
-                        key={index}
-                        ref={(el) => transcriptRefs.current[line.timestamp] = el}
-                        style={{ animationDelay: `${index * 30}ms` }}
-                        className={`p-3 rounded-2xl border transition-all duration-350 animate-fade-in-up ${isHighlighted ? 'animate-flash-pulse border-neutral-350 scale-[1.01] shadow-sm' : 'bg-neutral-50/50 border-neutral-100/80'}`}
-                      >
-                        <div className="flex items-center justify-between mb-1.5">
-                          <span className="text-[9px] font-bold tracking-widest text-neutral-500 bg-neutral-100 border border-neutral-200/50 px-2 py-0.5 rounded-full font-mono">
-                            {line.timestamp}
-                          </span>
-                          <span className="text-[10px] font-bold text-black uppercase">{line.speaker}</span>
-                        </div>
-                        <p className="text-xs text-neutral-600 leading-relaxed leading-relaxed">{line.text}</p>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <div className="flex flex-col items-center justify-center h-full text-center p-4">
-                    <Calendar className="h-8 w-8 text-neutral-300 mb-2" />
-                    <p className="text-xs text-neutral-450 font-bold uppercase tracking-wider">Select a meeting from the archive list to view transcripts</p>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* COLUMN 3: Glassy AI Extraction Panel (5 Columns) */}
-            <div className="lg:col-span-5 h-full bg-white/95 backdrop-blur-md border border-neutral-100 rounded-3xl p-6 shadow-xl shadow-neutral-900/5 flex flex-col min-h-0 overflow-hidden relative">
-              <div className="border-b border-neutral-100 shrink-0">
-                <div className="flex space-x-1.5 pb-2">
-                  {['summary', 'actions', 'follow ups'].map(tab => (
+          isMobile ? (
+            <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+              {!showMobileDetails ? (
+                // Mobile Meetings List
+                <div className="flex-1 overflow-y-auto pb-6 space-y-4">
+                  <div className="flex items-center justify-between pb-3 border-b border-neutral-100/60">
+                    <span className="text-[10px] font-bold tracking-widest text-neutral-400 uppercase font-bold">Meetings Archive</span>
                     <button
-                      key={tab}
-                      onClick={() => setDetailsTab(tab)}
-                      className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider active:scale-95 transition-all duration-300 ${detailsTab === tab ? 'bg-black text-white' : 'text-neutral-500 hover:text-black'}`}
+                      onClick={() => setIsIngestModalOpen(true)}
+                      className="p-1.5 rounded-full bg-black text-white hover:bg-neutral-850 active:scale-95 transition focus:outline-none shadow-sm"
+                      title="Upload meeting"
                     >
-                      {tab}
+                      <Plus className="h-4 w-4" />
                     </button>
-                  ))}
+                  </div>
+
+                  {/* Ingesting Skeleton Loader */}
+                  {isIngesting && (
+                    <div className="bg-white border border-neutral-100 p-4 rounded-2xl space-y-3 animate-pulse shadow-sm">
+                      <div className="h-4 bg-neutral-100 rounded w-2/3"></div>
+                      <div className="h-3 bg-neutral-100 rounded w-full"></div>
+                      <div className="pt-2 border-t border-neutral-50 text-[9px] text-neutral-400 font-mono">
+                        <span>Processing Trace: {ingestTraceId}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {meetings.length === 0 && !isIngesting ? (
+                    <p className="text-xs text-neutral-450 italic uppercase font-bold py-4">No meetings indexed.</p>
+                  ) : (
+                    <div className="space-y-3.5">
+                      {meetings.map((meeting, index) => {
+                        const isSelected = selectedMeeting?.id === meeting.id;
+                        return (
+                          <div
+                            key={meeting.id}
+                            onClick={() => handleViewMeetingDetails(meeting, true)}
+                            style={{ animationDelay: `${index * 50}ms` }}
+                            className={`p-4 border border-neutral-100/60 rounded-2xl cursor-pointer hover:shadow-lg hover:-translate-y-0.5 animate-fade-in-up transition-all duration-300 flex flex-col justify-between group ${isSelected ? 'bg-neutral-100 text-black border-neutral-200/50 shadow-sm' : 'bg-white text-neutral-700'}`}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <h4 className="text-xs font-bold uppercase tracking-wide truncate group-hover:text-black transition">{meeting.title}</h4>
+                              <ChevronRight className="h-4 w-4 text-neutral-450 group-hover:translate-x-0.5 transition shrink-0" />
+                            </div>
+                            <div className="flex items-center space-x-1 text-[9px] text-neutral-450 font-mono mt-3">
+                              <Clock className="h-3 w-3" />
+                              <span>{new Date(meeting.meetingDate).toLocaleDateString()}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                // Mobile Meeting Detail View
+                <div className="flex-1 flex flex-col min-h-0 overflow-hidden bg-white border border-neutral-100 rounded-3xl shadow-xl shadow-neutral-900/5">
+                  <div className="p-4 border-b border-neutral-100 flex items-center justify-between shrink-0">
+                    <button
+                      onClick={() => setShowMobileDetails(false)}
+                      className="flex items-center space-x-1 text-xs text-neutral-600 hover:text-black font-bold uppercase py-1 px-2.5 rounded-full bg-neutral-50 border border-neutral-100/60 active:scale-95 transition"
+                    >
+                      <ChevronRight className="h-3.5 w-3.5 rotate-180" />
+                      <span>Back</span>
+                    </button>
+                    <span className="text-[10px] font-mono text-neutral-400 font-bold uppercase tracking-wider">
+                      {selectedMeeting ? new Date(selectedMeeting.meetingDate).toLocaleDateString() : ''}
+                    </span>
+                  </div>
+
+                  <div className="px-5 py-4 border-b border-neutral-50 shrink-0">
+                    <h3 className="text-sm font-extrabold uppercase tracking-wide text-black truncate leading-tight">
+                      {selectedMeeting?.title}
+                    </h3>
+                  </div>
+
+                  <div className="px-4 py-2 bg-neutral-50/50 border-b border-neutral-100 shrink-0">
+                    <div className="flex space-x-1 overflow-x-auto scrollbar-none py-1">
+                      {['transcript', 'summary', 'actions', 'follow ups'].map(tab => (
+                        <button
+                          key={tab}
+                          onClick={() => setDetailsTab(tab)}
+                          className={`px-3 py-1 rounded-full text-[9px] font-bold uppercase tracking-wider shrink-0 active:scale-95 transition-all duration-300 ${detailsTab === tab ? 'bg-black text-white' : 'text-neutral-500 hover:text-black bg-white/60 border border-neutral-100/50'}`}
+                        >
+                          {tab}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto p-5 relative min-h-0">
+                    {isAnalyzing && !meetingAnalysis ? (
+                      renderSkeletonLoader()
+                    ) : (
+                      <>
+                        {detailsTab === 'transcript' && (
+                          <div className="space-y-4">
+                            {selectedMeeting?.transcript.map((line, index) => {
+                              const isHighlighted = activeCitationTimestamp === line.timestamp;
+                              return (
+                                <div
+                                  key={index}
+                                  ref={(el) => transcriptRefs.current[line.timestamp] = el}
+                                  className={`p-3 rounded-2xl border transition-all duration-350 animate-fade-in-up ${isHighlighted ? 'animate-flash-pulse border-neutral-350 scale-[1.01] shadow-sm' : 'bg-neutral-50/50 border-neutral-100/80'}`}
+                                >
+                                  <div className="flex items-center justify-between mb-1.5">
+                                    <span className="text-[9px] font-bold tracking-widest text-neutral-500 bg-neutral-100 border border-neutral-200/50 px-2 py-0.5 rounded-full font-mono">
+                                      {line.timestamp}
+                                    </span>
+                                    <span className="text-[10px] font-bold text-black uppercase">{line.speaker}</span>
+                                  </div>
+                                  <p className="text-xs text-neutral-600 leading-relaxed">{line.text}</p>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        {detailsTab === 'summary' && meetingAnalysis && (
+                          <div className="space-y-6 animate-fade-in-up">
+                            <div className="space-y-3">
+                              <span className="text-[9px] font-bold tracking-widest text-neutral-400 uppercase">Highlights Summary</span>
+                              <ul className="space-y-3">
+                                {meetingAnalysis.summary && meetingAnalysis.summary.map((point, index) => (
+                                  <li key={index} className="text-xs leading-relaxed text-neutral-600 flex items-start space-x-2">
+                                    <span className="text-black mt-1 select-none font-bold font-mono">•</span>
+                                    <span>
+                                      {point.text}{' '}
+                                      {point.citations && point.citations.map((cite, cIdx) => (
+                                        <CitationButton key={cIdx} cite={cite} onClick={() => handleTriggerCitation(cite)} />
+                                      ))}
+                                    </span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+
+                            <div className="space-y-3 pt-5 border-t border-neutral-100">
+                              <span className="text-[9px] font-bold tracking-widest text-neutral-400 uppercase">Decisions Made</span>
+                              {meetingAnalysis.decisions && meetingAnalysis.decisions.length > 0 ? (
+                                <ul className="space-y-3">
+                                  {meetingAnalysis.decisions.map((dec, index) => (
+                                    <li key={index} className="text-xs leading-relaxed text-neutral-600 flex items-start space-x-2">
+                                      <span className="text-neutral-900 mt-1 select-none font-bold">✓</span>
+                                      <span>
+                                        {dec.text}{' '}
+                                        {dec.citations && dec.citations.map((cite, cIdx) => (
+                                          <CitationButton key={cIdx} cite={cite} onClick={() => handleTriggerCitation(cite)} />
+                                        ))}
+                                      </span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              ) : (
+                                <p className="text-[9px] text-neutral-450 italic uppercase font-bold">No decisions detected.</p>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {detailsTab === 'actions' && meetingAnalysis && (
+                          <div className="space-y-4 animate-fade-in-up">
+                            <span className="text-[9px] font-bold tracking-widest text-neutral-400 uppercase">Extracted Tasks</span>
+                            <div className="space-y-3">
+                              {(() => {
+                                const dbActions = actionItems.filter(item => item.meetingId === selectedMeeting.id);
+                                if (dbActions.length > 0) {
+                                  return dbActions.map((item) => (
+                                    <MeetingDetailActionItem
+                                      key={item.id}
+                                      item={item}
+                                      selectedMeeting={selectedMeeting}
+                                      meetingAnalysis={meetingAnalysis}
+                                      onUpdateStatus={handleUpdateStatus}
+                                      onTriggerCitation={handleTriggerCitation}
+                                    />
+                                  ));
+                                } else if (meetingAnalysis.actionItems && meetingAnalysis.actionItems.length > 0) {
+                                  return meetingAnalysis.actionItems.map((action, index) => (
+                                    <div key={index} className="bg-neutral-50/50 border border-neutral-100 p-4 rounded-2xl space-y-2">
+                                      <div className="flex items-start justify-between gap-4">
+                                        <div className="flex items-start space-x-2.5">
+                                          <CheckCircle2 className="h-4 w-4 text-black shrink-0 mt-0.5" />
+                                          <h5 className="text-xs font-semibold text-neutral-800 leading-relaxed">{action.task}</h5>
+                                        </div>
+                                        {action.citations && action.citations.map((cite, cIdx) => (
+                                          <CitationButton key={cIdx} cite={cite} onClick={() => handleTriggerCitation(cite)} />
+                                        ))}
+                                      </div>
+                                      <div className="flex items-center justify-between text-xs text-neutral-400 pt-2 border-t border-neutral-100/60">
+                                        <span>Assignee: <strong className="text-neutral-800 font-semibold">{action.assignee}</strong></span>
+                                        <span className="bg-white border border-neutral-200 text-neutral-500 text-[9px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider font-mono">
+                                          INGESTED
+                                        </span>
+                                      </div>
+                                    </div>
+                                  ));
+                                } else {
+                                  return <p className="text-[9px] text-neutral-450 italic uppercase font-bold">No action items extracted.</p>;
+                                }
+                              })()}
+                            </div>
+                          </div>
+                        )}
+
+                        {detailsTab === 'follow ups' && meetingAnalysis && (
+                          <div className="space-y-4 animate-fade-in-up">
+                            <span className="text-[9px] font-bold tracking-widest text-neutral-400 uppercase">Follow-up Tasks</span>
+                            {meetingAnalysis.followUps && meetingAnalysis.followUps.length > 0 ? (
+                              <ul className="space-y-3">
+                                {meetingAnalysis.followUps.map((pt, index) => (
+                                  <li key={index} className="text-xs leading-relaxed text-neutral-600 flex items-start space-x-2">
+                                    <span className="text-black mt-1 select-none font-bold">→</span>
+                                    <span>
+                                      {pt.text}{' '}
+                                      {pt.citations && pt.citations.map((cite, cIdx) => (
+                                        <CitationButton key={cIdx} cite={cite} onClick={() => handleTriggerCitation(cite)} />
+                                      ))}
+                                    </span>
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <p className="text-[9px] text-neutral-450 italic uppercase font-bold">No follow-ups suggested.</p>
+                            )}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-[calc(100vh-6rem)] overflow-hidden">
+              {/* COLUMN 1: Ingested Meetings Library Feed (3 Columns) */}
+              <div className="lg:col-span-3 h-full overflow-y-auto pr-2 space-y-4">
+                <div className="flex items-center justify-between pb-2 border-b border-neutral-100/60">
+                  <span className="text-[10px] font-bold tracking-widest text-neutral-400 uppercase font-bold">Meetings Archive</span>
+                  <button
+                    onClick={() => setIsIngestModalOpen(true)}
+                    className="p-1.5 rounded-full bg-black text-white hover:bg-neutral-850 active:scale-95 transition focus:outline-none shadow-sm"
+                    title="Upload meeting"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
+                </div>
+
+                {/* Ingesting Skeleton Loader */}
+                {isIngesting && (
+                  <div className="bg-white border border-neutral-100 p-4 rounded-2xl space-y-3 animate-pulse shadow-sm">
+                    <div className="h-4 bg-neutral-100 rounded w-2/3"></div>
+                    <div className="h-3 bg-neutral-100 rounded w-full"></div>
+                    <div className="pt-2 border-t border-neutral-50 text-[9px] text-neutral-400 font-mono">
+                      <span>Processing Trace: {ingestTraceId}</span>
+                    </div>
+                  </div>
+                )}
+
+                {meetings.length === 0 && !isIngesting ? (
+                  <p className="text-xs text-neutral-450 italic uppercase font-bold py-4">No meetings indexed.</p>
+                ) : (
+                  <div className="space-y-3.5">
+                    {meetings.map((meeting, index) => {
+                      const isSelected = selectedMeeting?.id === meeting.id;
+                      return (
+                        <div
+                          key={meeting.id}
+                          onClick={() => handleViewMeetingDetails(meeting, false)}
+                          style={{ animationDelay: `${index * 50}ms` }}
+                          className={`p-4 border border-neutral-100/60 rounded-2xl cursor-pointer hover:shadow-lg hover:-translate-y-0.5 animate-fade-in-up transition-all duration-300 flex flex-col justify-between group ${isSelected ? 'bg-neutral-100 text-black shadow-sm border-neutral-200/50' : 'bg-white text-neutral-700'}`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <h4 className="text-xs font-bold uppercase tracking-wide truncate group-hover:text-black transition">{meeting.title}</h4>
+                            <ChevronRight className="h-4 w-4 text-neutral-400 group-hover:translate-x-0.5 transition shrink-0" />
+                          </div>
+                          <div className="flex items-center space-x-1 text-[9px] text-neutral-400 font-mono mt-3">
+                            <Clock className="h-3 w-3" />
+                            <span>{new Date(meeting.meetingDate).toLocaleDateString()}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* COLUMN 2: Transcript Console (4 Columns) */}
+              <div className="lg:col-span-4 h-full bg-white border border-neutral-100 rounded-3xl p-6 shadow-xl shadow-neutral-900/5 flex flex-col min-h-0 overflow-hidden">
+                <div className="pb-3 border-b border-neutral-100 shrink-0">
+                  <span className="text-[10px] font-bold tracking-widest text-neutral-400 uppercase font-bold">Transcript Console</span>
+                  {selectedMeeting && (
+                    <p className="text-[9px] text-neutral-500 mt-0.5 uppercase font-bold tracking-wider">Grounding analysis logs active</p>
+                  )}
+                </div>
+
+                <div className="flex-1 overflow-y-auto mt-4 space-y-3.5 pr-1 min-h-0">
+                  {selectedMeeting ? (
+                    selectedMeeting.transcript.map((line, index) => {
+                      const isHighlighted = activeCitationTimestamp === line.timestamp;
+                      return (
+                        <div
+                          key={index}
+                          ref={(el) => transcriptRefs.current[line.timestamp] = el}
+                          style={{ animationDelay: `${index * 30}ms` }}
+                          className={`p-3 rounded-2xl border transition-all duration-350 animate-fade-in-up ${isHighlighted ? 'animate-flash-pulse border-neutral-350 scale-[1.01] shadow-sm' : 'bg-neutral-50/50 border-neutral-100/80'}`}
+                        >
+                          <div className="flex items-center justify-between mb-1.5">
+                            <span className="text-[9px] font-bold tracking-widest text-neutral-500 bg-neutral-100 border border-neutral-200/50 px-2 py-0.5 rounded-full font-mono">
+                              {line.timestamp}
+                            </span>
+                            <span className="text-[10px] font-bold text-black uppercase">{line.speaker}</span>
+                          </div>
+                          <p className="text-xs text-neutral-600 leading-relaxed">{line.text}</p>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="flex flex-col items-center justify-center h-full text-center p-4">
+                      <Calendar className="h-8 w-8 text-neutral-300 mb-2" />
+                      <p className="text-xs text-neutral-450 font-bold uppercase tracking-wider">Select a meeting from the archive list to view transcripts</p>
+                    </div>
+                  )}
                 </div>
               </div>
 
-              {/* Tab Content Panel with Glassy Cross-fade Transitions */}
-              <div className="flex-1 relative mt-4 min-h-0 w-full overflow-hidden">
-                {isAnalyzing && !meetingAnalysis ? (
-                  renderSkeletonLoader()
-                ) : meetingAnalysis && selectedMeeting ? (
-                  <>
-                    {/* TAB A: Summary & Decisions (Cross-fade overlay) */}
-                    <div className={`absolute inset-0 overflow-y-auto pr-1 transition-all duration-300 ease-out flex flex-col space-y-6 ${detailsTab === 'summary' ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-2 pointer-events-none'}`}>
-                      <div className="space-y-3">
-                        <h4 className="text-[10px] font-bold tracking-widest text-neutral-400 uppercase">Highlights Summary</h4>
-                        <ul className="space-y-3">
-                          {meetingAnalysis.summary && meetingAnalysis.summary.map((point, index) => (
-                            <li key={index} className="text-xs leading-relaxed text-neutral-600 flex items-start space-x-2">
-                              <span className="text-black mt-1 select-none font-bold font-mono">•</span>
-                              <span>
-                                {point.text}{' '}
-                                {point.citations && point.citations.map((cite, cIdx) => (
-                                  <CitationButton key={cIdx} cite={cite} onClick={() => handleTriggerCitation(cite)} />
-                                ))}
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
+              {/* COLUMN 3: Glassy AI Extraction Panel (5 Columns) */}
+              <div className="lg:col-span-5 h-full bg-white/95 backdrop-blur-md border border-neutral-100 rounded-3xl p-6 shadow-xl shadow-neutral-900/5 flex flex-col min-h-0 overflow-hidden relative">
+                <div className="border-b border-neutral-100 shrink-0">
+                  <div className="flex space-x-1.5 pb-2">
+                    {['summary', 'actions', 'follow ups'].map(tab => (
+                      <button
+                        key={tab}
+                        onClick={() => setDetailsTab(tab)}
+                        className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider active:scale-95 transition-all duration-300 ${detailsTab === tab ? 'bg-black text-white' : 'text-neutral-500 hover:text-black'}`}
+                      >
+                        {tab}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Tab Content Panel with Glassy Cross-fade Transitions */}
+                <div className="flex-1 relative mt-4 min-h-0 w-full overflow-hidden">
+                  {isAnalyzing && !meetingAnalysis ? (
+                    renderSkeletonLoader()
+                  ) : meetingAnalysis && selectedMeeting ? (
+                    <>
+                      {/* TAB A: Summary & Decisions (Cross-fade overlay) */}
+                      <div className={`absolute inset-0 overflow-y-auto pr-1 transition-all duration-300 ease-out flex flex-col space-y-6 ${detailsTab === 'summary' ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-2 pointer-events-none'}`}>
+                        <div className="space-y-3">
+                          <h4 className="text-[10px] font-bold tracking-widest text-neutral-400 uppercase">Highlights Summary</h4>
+                          <ul className="space-y-3">
+                            {meetingAnalysis.summary && meetingAnalysis.summary.map((point, index) => (
+                              <li key={index} className="text-xs leading-relaxed text-neutral-600 flex items-start space-x-2">
+                                <span className="text-black mt-1 select-none font-bold font-mono">•</span>
+                                <span>
+                                  {point.text}{' '}
+                                  {point.citations && point.citations.map((cite, cIdx) => (
+                                    <CitationButton key={cIdx} cite={cite} onClick={() => handleTriggerCitation(cite)} />
+                                  ))}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+
+                        <div className="space-y-3 pt-5 border-t border-neutral-100">
+                          <h4 className="text-[10px] font-bold tracking-widest text-neutral-400 uppercase">Decisions Made</h4>
+                          {meetingAnalysis.decisions && meetingAnalysis.decisions.length > 0 ? (
+                            <ul className="space-y-3">
+                              {meetingAnalysis.decisions.map((dec, index) => (
+                                <li key={index} className="text-xs leading-relaxed text-neutral-600 flex items-start space-x-2">
+                                  <span className="text-neutral-900 mt-1 select-none font-bold">✓</span>
+                                  <span>
+                                    {dec.text}{' '}
+                                    {dec.citations && dec.citations.map((cite, cIdx) => (
+                                      <CitationButton key={cIdx} cite={cite} onClick={() => handleTriggerCitation(cite)} />
+                                    ))}
+                                  </span>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="text-[10px] text-neutral-450 italic uppercase font-bold">No decisions detected.</p>
+                          )}
+                        </div>
                       </div>
 
-                      <div className="space-y-3 pt-5 border-t border-neutral-100">
-                        <h4 className="text-[10px] font-bold tracking-widest text-neutral-400 uppercase">Decisions Made</h4>
-                        {meetingAnalysis.decisions && meetingAnalysis.decisions.length > 0 ? (
+                      {/* TAB B: Action Items Checklist (Cross-fade overlay) */}
+                      <div className={`absolute inset-0 overflow-y-auto pr-1 transition-all duration-300 ease-out flex flex-col space-y-4 ${detailsTab === 'actions' ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-2 pointer-events-none'}`}>
+                        <h4 className="text-[10px] font-bold tracking-widest text-neutral-400 uppercase">Extracted Tasks</h4>
+                        <div className="space-y-3">
+                          {/* Render active checklist items bound to database and actions */}
+                          {(() => {
+                            const dbActions = actionItems.filter(item => item.meetingId === selectedMeeting.id);
+                            if (dbActions.length > 0) {
+                              return dbActions.map((item) => (
+                                <MeetingDetailActionItem
+                                  key={item.id}
+                                  item={item}
+                                  selectedMeeting={selectedMeeting}
+                                  meetingAnalysis={meetingAnalysis}
+                                  onUpdateStatus={handleUpdateStatus}
+                                  onTriggerCitation={handleTriggerCitation}
+                                />
+                              ));
+                            } else if (meetingAnalysis.actionItems && meetingAnalysis.actionItems.length > 0) {
+                              // Fallback raw parsed items
+                              return meetingAnalysis.actionItems.map((action, index) => (
+                                <div key={index} className="bg-neutral-50/50 border border-neutral-100 p-4 rounded-2xl space-y-2">
+                                  <div className="flex items-start justify-between gap-4">
+                                    <div className="flex items-start space-x-2.5">
+                                      <CheckCircle2 className="h-4 w-4 text-black shrink-0 mt-0.5" />
+                                      <h5 className="text-xs font-semibold text-neutral-800 leading-relaxed">{action.task}</h5>
+                                    </div>
+                                    {action.citations && action.citations.map((cite, cIdx) => (
+                                      <CitationButton key={cIdx} cite={cite} onClick={() => handleTriggerCitation(cite)} />
+                                    ))}
+                                  </div>
+                                  <div className="flex items-center justify-between text-xs text-neutral-450 pt-2 border-t border-neutral-100/60">
+                                    <span>Assignee: <strong className="text-neutral-800 font-semibold">{action.assignee}</strong></span>
+                                    <span className="bg-white border border-neutral-200 text-neutral-500 text-[9px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider font-mono">
+                                      INGESTED
+                                    </span>
+                                  </div>
+                                </div>
+                              ));
+                            } else {
+                              return <p className="text-[10px] text-neutral-450 italic uppercase font-bold">No action items extracted.</p>;
+                            }
+                          })()}
+                        </div>
+                      </div>
+
+                      {/* TAB C: Follow-ups (Cross-fade overlay) */}
+                      <div className={`absolute inset-0 overflow-y-auto pr-1 transition-all duration-300 ease-out flex flex-col space-y-4 ${detailsTab === 'follow ups' ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-2 pointer-events-none'}`}>
+                        <h4 className="text-[10px] font-bold tracking-widest text-neutral-400 uppercase">Follow-up Tasks</h4>
+                        {meetingAnalysis.followUps && meetingAnalysis.followUps.length > 0 ? (
                           <ul className="space-y-3">
-                            {meetingAnalysis.decisions.map((dec, index) => (
+                            {meetingAnalysis.followUps.map((pt, index) => (
                               <li key={index} className="text-xs leading-relaxed text-neutral-600 flex items-start space-x-2">
-                                <span className="text-neutral-900 mt-1 select-none font-bold">✓</span>
+                                <span className="text-black mt-1 select-none font-bold">→</span>
                                 <span>
-                                  {dec.text}{' '}
-                                  {dec.citations && dec.citations.map((cite, cIdx) => (
+                                  {pt.text}{' '}
+                                  {pt.citations && pt.citations.map((cite, cIdx) => (
                                     <CitationButton key={cIdx} cite={cite} onClick={() => handleTriggerCitation(cite)} />
                                   ))}
                                 </span>
@@ -826,89 +1153,20 @@ export default function App() {
                             ))}
                           </ul>
                         ) : (
-                          <p className="text-[10px] text-neutral-450 italic uppercase font-bold">No decisions detected.</p>
+                          <p className="text-[10px] text-neutral-450 italic uppercase font-bold">No follow-ups suggested.</p>
                         )}
                       </div>
+                    </>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center h-full text-center p-4 absolute inset-0">
+                      <Database className="h-8 w-8 text-neutral-300 mb-2 animate-pulse" />
+                      <p className="text-xs text-neutral-450 font-bold uppercase tracking-wider">No analysis parsed. Select a meeting record.</p>
                     </div>
-
-                    {/* TAB B: Action Items Checklist (Cross-fade overlay) */}
-                    <div className={`absolute inset-0 overflow-y-auto pr-1 transition-all duration-300 ease-out flex flex-col space-y-4 ${detailsTab === 'actions' ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-2 pointer-events-none'}`}>
-                      <h4 className="text-[10px] font-bold tracking-widest text-neutral-400 uppercase">Extracted Tasks</h4>
-                      <div className="space-y-3">
-                        {/* Render active checklist items bound to database and actions */}
-                        {(() => {
-                          const dbActions = actionItems.filter(item => item.meetingId === selectedMeeting.id);
-                          if (dbActions.length > 0) {
-                            return dbActions.map((item) => (
-                              <MeetingDetailActionItem
-                                key={item.id}
-                                item={item}
-                                selectedMeeting={selectedMeeting}
-                                meetingAnalysis={meetingAnalysis}
-                                onUpdateStatus={handleUpdateStatus}
-                                onTriggerCitation={handleTriggerCitation}
-                              />
-                            ));
-                          } else if (meetingAnalysis.actionItems && meetingAnalysis.actionItems.length > 0) {
-                            // Fallback raw parsed items
-                            return meetingAnalysis.actionItems.map((action, index) => (
-                              <div key={index} className="bg-neutral-50/50 border border-neutral-100 p-4 rounded-2xl space-y-2">
-                                <div className="flex items-start justify-between gap-4">
-                                  <div className="flex items-start space-x-2.5">
-                                    <CheckCircle2 className="h-4 w-4 text-black shrink-0 mt-0.5" />
-                                    <h5 className="text-xs font-semibold text-neutral-800 leading-relaxed">{action.task}</h5>
-                                  </div>
-                                  {action.citations && action.citations.map((cite, cIdx) => (
-                                    <CitationButton key={cIdx} cite={cite} onClick={() => handleTriggerCitation(cite)} />
-                                  ))}
-                                </div>
-                                <div className="flex items-center justify-between text-xs text-neutral-400 pt-2 border-t border-neutral-100/60">
-                                  <span>Assignee: <strong className="text-neutral-800 font-semibold">{action.assignee}</strong></span>
-                                  <span className="bg-white border border-neutral-200 text-neutral-500 text-[9px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider font-mono">
-                                    INGESTED
-                                  </span>
-                                </div>
-                              </div>
-                            ));
-                          } else {
-                            return <p className="text-[10px] text-neutral-450 italic uppercase font-bold">No action items extracted.</p>;
-                          }
-                        })()}
-                      </div>
-                    </div>
-
-                    {/* TAB C: Follow-ups (Cross-fade overlay) */}
-                    <div className={`absolute inset-0 overflow-y-auto pr-1 transition-all duration-300 ease-out flex flex-col space-y-4 ${detailsTab === 'follow ups' ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-2 pointer-events-none'}`}>
-                      <h4 className="text-[10px] font-bold tracking-widest text-neutral-400 uppercase">Follow-up Tasks</h4>
-                      {meetingAnalysis.followUps && meetingAnalysis.followUps.length > 0 ? (
-                        <ul className="space-y-3">
-                          {meetingAnalysis.followUps.map((pt, index) => (
-                            <li key={index} className="text-xs leading-relaxed text-neutral-600 flex items-start space-x-2">
-                              <span className="text-black mt-1 select-none font-bold">→</span>
-                              <span>
-                                {pt.text}{' '}
-                                {pt.citations && pt.citations.map((cite, cIdx) => (
-                                  <CitationButton key={cIdx} cite={cite} onClick={() => handleTriggerCitation(cite)} />
-                                ))}
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p className="text-[10px] text-neutral-450 italic uppercase font-bold">No follow-ups suggested.</p>
-                      )}
-                    </div>
-                  </>
-                ) : (
-                  <div className="flex flex-col items-center justify-center h-full text-center p-4 absolute inset-0">
-                    <Database className="h-8 w-8 text-neutral-300 mb-2 animate-pulse" />
-                    <p className="text-xs text-neutral-450 font-bold uppercase tracking-wider">No analysis parsed. Select a meeting record.</p>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             </div>
-
-          </div>
+          )
         )}
 
         {/* VIEW C: Action Items List */}
@@ -1042,6 +1300,34 @@ export default function App() {
         setIngestTranscript={setIngestTranscript}
         handleIngestMeeting={handleIngestMeeting}
       />
+
+      {/* 3. Sticky Bottom Navigation Bar for Mobile */}
+      <div className="lg:hidden shrink-0 h-16 border-t border-neutral-100 bg-white/95 backdrop-blur-md flex items-center justify-around px-4 pb-safe shadow-[0_-4px_12px_rgba(0,0,0,0.03)] z-40">
+        {[
+          { id: 'dashboard', label: 'Overview', icon: BarChart2 },
+          { id: 'meetings', label: 'Meetings', icon: Calendar },
+          { id: 'action-items', label: 'Actions', icon: CheckSquare },
+          { id: 'system-health', label: 'Health', icon: Server }
+        ].map(view => {
+          const Icon = view.icon;
+          const isActive = currentView === view.id || (view.id === 'meetings' && currentView === 'meeting-detail');
+          return (
+            <button
+              key={view.id}
+              onClick={() => {
+                setCurrentView(view.id);
+                if (view.id === 'meetings') {
+                  setShowMobileDetails(false); // Reset to list view when clicking the main meetings tab
+                }
+              }}
+              className={`flex flex-col items-center justify-center gap-1 w-16 py-1 transition-all duration-200 ${isActive ? 'text-black font-semibold' : 'text-neutral-400 hover:text-neutral-700'}`}
+            >
+              <Icon className={`h-4.5 w-4.5 transition-transform duration-300 ${isActive ? 'scale-110 stroke-[2.2px]' : 'stroke-[1.8px]'}`} />
+              <span className="text-[8px] font-bold uppercase tracking-widest">{view.label}</span>
+            </button>
+          );
+        })}
+      </div>
 
       {/* Unified Notification Toast Pipeline */}
       <ToastContainer toasts={toasts} />
@@ -1285,7 +1571,7 @@ function IngestModal({
   if (!isIngestModalOpen) return null;
   return (
     <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-center justify-center p-4 transition-all duration-300">
-      <div className="bg-white border border-neutral-100 rounded-3xl shadow-2xl max-w-xl w-full p-6 space-y-6 relative overflow-hidden transition-all duration-300 animate-fade-in-up">
+      <div className="bg-white border border-neutral-100 rounded-3xl shadow-2xl max-w-xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-6 relative transition-all duration-300 animate-fade-in-up">
         <div className="flex items-center justify-between">
           <h3 className="text-base font-bold text-black uppercase tracking-wider">Ingest Audio Transcript</h3>
           <button
