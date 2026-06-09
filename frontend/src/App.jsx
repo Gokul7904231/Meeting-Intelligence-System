@@ -181,6 +181,51 @@ export default function App() {
     }
   };
 
+  const handleDemoLogin = async () => {
+    const email = "demo@hintro.com";
+    const password = "password123";
+    
+    const login = async () => {
+      const response = await fetch(`${API_BASE_URL}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      return response;
+    };
+
+    try {
+      let response = await login();
+      if (!response.ok) {
+        // Automatically register the demo account if it doesn't exist
+        const regResponse = await fetch(`${API_BASE_URL}/auth/register`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+        });
+        
+        if (regResponse.ok) {
+          response = await login();
+        }
+      }
+
+      const data = await response.json();
+      if (response.ok && data.success) {
+        localStorage.setItem('access_token', data.data.access_token);
+        localStorage.setItem('userId', data.data.userId);
+        localStorage.setItem('user_email', email);
+        setToken(data.data.access_token);
+        setUserId(data.data.userId);
+        setUserEmail(email);
+        showToast("Logged in with Demo Account.", "success", data.traceId);
+      } else {
+        showToast("Demo login failed: " + (data.error?.message || "unauthorized"), "error");
+      }
+    } catch (err) {
+      showToast("Backend connection refused. Make sure backend service is up.", "error");
+    }
+  };
+
   const handleLogout = () => {
     localStorage.removeItem('access_token');
     localStorage.removeItem('userId');
@@ -465,6 +510,7 @@ export default function App() {
         authPassword={authPassword}
         setAuthPassword={setAuthPassword}
         handleAuth={handleAuth}
+        handleDemoLogin={handleDemoLogin}
         toasts={toasts}
       />
     );
@@ -538,7 +584,7 @@ export default function App() {
     <div className="flex flex-col h-screen bg-neutral-50 text-neutral-805 overflow-hidden font-sans select-none">
 
       {/* 1. Floating Glassy Top Navigation Bar */}
-      <div className="w-full max-w-7xl mx-auto px-4 md:px-6 pt-3 md:pt-4 shrink-0">
+      <div className="w-full max-w-7xl mx-auto px-4 md:px-6 pt-3 md:pt-4 shrink-0 relative z-50">
         <header className="w-full px-4 md:px-6 h-16 flex items-center justify-between bg-white/80 backdrop-blur-md border border-neutral-100 rounded-full shadow-lg shadow-black/[0.03]">
           <div className="flex items-center space-x-2.5">
             <div className="h-8 w-8 rounded-full bg-black flex items-center justify-center font-bold text-white text-xs shadow-sm hover:scale-105 active:scale-95 transition-transform duration-300">
@@ -576,9 +622,9 @@ export default function App() {
 
           {/* User profile dropdown and status light */}
           <div className="flex items-center space-x-4">
-            <div className="flex items-center space-x-2 bg-neutral-50 border border-neutral-100 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider shadow-sm">
+            <div className="hidden md:flex items-center space-x-2 bg-neutral-50 border border-neutral-100 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider shadow-sm">
               <span className={`h-1.5 w-1.5 rounded-full ${backendStatus === 'connected' ? 'bg-black animate-pulse' : 'bg-neutral-300'}`}></span>
-              <span className="text-neutral-500 font-semibold hidden sm:inline">GATEWAY</span>
+              <span className="text-neutral-500 font-semibold">GATEWAY</span>
             </div>
 
             <div className="relative">
@@ -1210,6 +1256,17 @@ export default function App() {
         {/* VIEW D: System Health Tab */}
         {currentView === 'system-health' && (
           <div className="max-w-6xl mx-auto space-y-8 h-full overflow-y-auto pr-2">
+            {isMobile && (
+              <div className="pt-2">
+                <button
+                  onClick={() => setCurrentView('dashboard')}
+                  className="flex items-center space-x-1.5 text-xs text-neutral-600 hover:text-black font-bold uppercase py-1.5 px-3 rounded-full bg-neutral-100 active:scale-95 transition"
+                >
+                  <ChevronRight className="h-4 w-4 rotate-180" />
+                  <span>Back to Overview</span>
+                </button>
+              </div>
+            )}
             <div>
               <h2 className="text-3xl font-extrabold tracking-tight text-black font-display uppercase">System Health</h2>
               <p className="text-neutral-400 text-xs uppercase tracking-wider font-bold mt-1">Live configuration parameters and audit logs</p>
@@ -1412,6 +1469,7 @@ function LoginForm({
   authPassword,
   setAuthPassword,
   handleAuth,
+  handleDemoLogin,
   toasts
 }) {
   return (
@@ -1459,6 +1517,15 @@ function LoginForm({
             className="group relative flex w-full justify-center rounded-full bg-black text-white px-6 py-3 text-xs font-bold uppercase tracking-widest hover:bg-neutral-800 active:scale-95 transition-all duration-300 shadow-md shadow-neutral-950/10 border border-black"
           >
             {isRegistering ? "Register Workspace Account" : "Access Workspace"}
+          </button>
+
+          <button
+            type="button"
+            id="demo-login-btn"
+            onClick={handleDemoLogin}
+            className="group relative flex w-full justify-center rounded-full bg-neutral-100 hover:bg-neutral-200 text-black px-6 py-3 text-xs font-bold uppercase tracking-widest active:scale-95 transition-all duration-300 shadow-sm border border-neutral-250 mt-3"
+          >
+            Instant Demo Access
           </button>
         </form>
 
