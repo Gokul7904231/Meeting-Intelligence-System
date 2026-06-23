@@ -1,6 +1,7 @@
 # Hintro Meeting Intelligence Service
 
 Hintro is a premium, high-end meeting intelligence service featuring an **Elegant Fluid Monochrome** dashboard interface. It ingests meeting audio transcripts, performs AI-powered summarization and citation grounding using the Gemini API, tracks action items, and schedules webhook notifications for overdue deliverables.
+Live : https://hintro-intel.onrender.com/
 
 ---
 
